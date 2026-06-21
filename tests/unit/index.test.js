@@ -1,5 +1,11 @@
 import { jest } from '@jest/globals';
 
+const mockFetch = jest.fn();
+
+jest.unstable_mockModule('node-fetch', () => ({
+  default: mockFetch
+}));
+
 describe('index.js Component Tests', () => {
   let index;
 
@@ -7,40 +13,185 @@ describe('index.js Component Tests', () => {
     index = await import('../../index.js');
   });
 
-  describe('transformJobsForSOLR', () => {
-    it('should filter locations to only Romanian cities', () => {
-      const payload = {
-        jobs: [
-          { url: 'https://test.com/1', title: 'Job 1', location: ['România'] },
-          { url: 'https://test.com/2', title: 'Job 2', location: ['Bucharest'] },
-          { url: 'https://test.com/3', title: 'Job 3', location: ['Bulgaria'] },
-          { url: 'https://test.com/4', title: 'Job 4', location: ['Cluj-Napoca'] },
-          { url: 'https://test.com/5', title: 'Job 5', location: [] }
-        ]
-      };
-
-      const result = index.transformJobsForSOLR(payload);
-
-      expect(result.jobs[0].location).toEqual(['România']);
-      expect(result.jobs[1].location).toEqual(['Bucharest']);
-      expect(result.jobs[2].location).toEqual(['România']);
-      expect(result.jobs[3].location).toEqual(['Cluj-Napoca']);
-      expect(result.jobs[4].location).toEqual(['România']);
+  describe('fetchJobsPage', () => {
+    beforeEach(() => {
+      mockFetch.mockReset();
     });
 
+    it('should fetch data from BambooHR API and return JSON', async () => {
+      const mockData = {
+        result: [{ id: 1, jobOpeningName: 'Test' }],
+        meta: { totalCount: 1 }
+      };
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => mockData
+      });
+
+      const result = await index.fetchJobsPage();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://tecss.bamboohr.com/careers/list',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'User-Agent': 'job_seeker_ro_spider'
+          })
+        })
+      );
+      expect(result).toEqual(mockData);
+    });
+
+    it('should throw on non-ok response', async () => {
+      mockFetch.mockResolvedValue({ ok: false, status: 500 });
+
+      await expect(index.fetchJobsPage()).rejects.toThrow('BambooHR API error 500');
+    });
+
+    it('should throw on network error', async () => {
+      mockFetch.mockRejectedValue(new Error('Network error'));
+
+      await expect(index.fetchJobsPage()).rejects.toThrow('Network error');
+    });
+  });
+
+  describe('parseJobsPage', () => {
+    it('should parse BambooHR API response format', () => {
+      const apiData = {
+        result: [
+          {
+            id: 40,
+            jobOpeningName: 'Full Stack Developer',
+            departmentLabel: 'Engineering',
+            location: { city: 'Cluj-Napoca', state: '', country: { name: 'Romania' } },
+            employmentStatusLabel: 'Full-Time',
+            publishedDate: '2025-01-15T00:00:00.000Z'
+          }
+        ],
+        meta: { totalCount: 1 }
+      };
+
+      const result = index.parseJobsPage(apiData);
+
+      expect(result.jobs).toHaveLength(1);
+      expect(result.jobs[0].title).toBe('Full Stack Developer');
+      expect(result.jobs[0].location).toEqual(['Cluj-Napoca']);
+      expect(result.jobs[0].url).toBe('https://tecss.bamboohr.com/careers/40');
+      expect(result.jobs[0].uid).toBe('40');
+      expect(result.total).toBe(1);
+    });
+
+    it('should handle empty job list', () => {
+      const apiData = { result: [], meta: { totalCount: 0 } };
+
+      const result = index.parseJobsPage(apiData);
+
+      expect(result.jobs).toEqual([]);
+      expect(result.total).toBe(0);
+    });
+
+    it('should handle missing result field', () => {
+      const result = index.parseJobsPage({});
+
+      expect(result.jobs).toEqual([]);
+      expect(result.total).toBe(0);
+    });
+
+    it('should include state in location when present', () => {
+      const apiData = {
+        result: [
+          {
+            id: 45,
+            jobOpeningName: 'Developer',
+            location: { city: 'Bucharest', state: 'București', country: { name: 'Romania' } }
+          }
+        ],
+        meta: { totalCount: 1 }
+      };
+
+      const result = index.parseJobsPage(apiData);
+      expect(result.jobs[0].location).toEqual(['Bucharest', 'București']);
+    });
+
+    it('should default to on-site workmode', () => {
+      const apiData = {
+        result: [
+          {
+            id: 50,
+            jobOpeningName: 'Developer',
+            location: { city: 'Cluj-Napoca', state: '', country: { name: 'Romania' } }
+          }
+        ],
+        meta: { totalCount: 1 }
+      };
+
+      const result = index.parseJobsPage(apiData);
+      expect(result.jobs[0].workmode).toBe('on-site');
+    });
+  });
+
+  describe('mapToJobModel', () => {
+    it('should map raw job to job model format', () => {
+      const rawJob = {
+        url: 'https://tecss.bamboohr.com/careers/40',
+        title: 'Full Stack Developer',
+        location: ['Cluj-Napoca'],
+        tags: ['JavaScript'],
+        workmode: 'on-site'
+      };
+
+      const COMPANY_NAME = 'TEC SOFTWARE SOLUTIONS SRL';
+      const COMPANY_CIF = '32971419';
+
+      const result = index.mapToJobModel(rawJob, COMPANY_CIF, COMPANY_NAME);
+
+      expect(result.url).toBe(rawJob.url);
+      expect(result.title).toBe(rawJob.title);
+      expect(result.company).toBe(COMPANY_NAME);
+      expect(result.cif).toBe(COMPANY_CIF);
+      expect(result.location).toEqual(rawJob.location);
+      expect(result.tags).toEqual(rawJob.tags);
+      expect(result.workmode).toBe(rawJob.workmode);
+      expect(result.status).toBe('scraped');
+      expect(result.date).toBeDefined();
+    });
+
+    it('should remove undefined fields', () => {
+      const rawJob = {
+        url: 'https://tecss.bamboohr.com/careers/1',
+        title: 'Job 1'
+      };
+
+      const result = index.mapToJobModel(rawJob, '32971419');
+
+      expect(result.location).toBeUndefined();
+      expect(result.tags).toBeUndefined();
+      expect(result.workmode).toBeUndefined();
+    });
+
+    it('should handle missing title', () => {
+      const rawJob = { url: 'https://tecss.bamboohr.com/careers/1' };
+
+      const result = index.mapToJobModel(rawJob, '32971419');
+
+      expect(result.title).toBeUndefined();
+      expect(result.url).toBe('https://tecss.bamboohr.com/careers/1');
+    });
+  });
+
+  describe('transformJobsForSOLR', () => {
     it('should keep company uppercase', () => {
       const payload = {
-        source: 'epam.com',
-        company: 'epam systems international srl',
-        cif: '33159615',
+        source: 'bamboohr.com',
+        company: 'tec software solutions srl',
+        cif: '32971419',
         jobs: [
-          { url: 'https://test.com/1', title: 'Job 1', company: 'epam systems', cif: '33159615' }
+          { url: 'https://tecss.bamboohr.com/careers/1', title: 'Job 1' }
         ]
       };
 
       const result = index.transformJobsForSOLR(payload);
 
-      expect(result.company).toBe('EPAM SYSTEMS INTERNATIONAL SRL');
+      expect(result.company).toBe('TEC SOFTWARE SOLUTIONS SRL');
     });
 
     it('should normalize workmode values', () => {
@@ -65,156 +216,17 @@ describe('index.js Component Tests', () => {
       const result = index.transformJobsForSOLR({ jobs: [] });
       expect(result.jobs).toEqual([]);
     });
-  });
 
-  describe('mapToJobModel', () => {
-    it('should map raw job to job model format', () => {
-      const rawJob = {
-        url: 'https://careers.epam.com/job/123',
-        title: 'Senior Developer',
-        location: ['Bucharest'],
-        tags: ['Java', 'Spring'],
-        workmode: 'hybrid'
+    it('should pass through location unchanged', () => {
+      const payload = {
+        jobs: [
+          { url: 'https://test.com/1', title: 'Job 1', location: ['Cluj-Napoca'] }
+        ]
       };
 
-      const COMPANY_NAME = 'EPAM SYSTEMS INTERNATIONAL SRL';
-      const COMPANY_CIF = '33159615';
+      const result = index.transformJobsForSOLR(payload);
 
-      const result = index.mapToJobModel(rawJob, COMPANY_CIF, COMPANY_NAME);
-
-      expect(result.url).toBe(rawJob.url);
-      expect(result.title).toBe(rawJob.title);
-      expect(result.company).toBe(COMPANY_NAME);
-      expect(result.cif).toBe(COMPANY_CIF);
-      expect(result.location).toEqual(rawJob.location);
-      expect(result.tags).toEqual(rawJob.tags);
-      expect(result.workmode).toBe(rawJob.workmode);
-      expect(result.status).toBe('scraped');
-      expect(result.date).toBeDefined();
-    });
-
-    it('should remove undefined fields', () => {
-      const rawJob = {
-        url: 'https://test.com/1',
-        title: 'Job 1'
-      };
-
-      const result = index.mapToJobModel(rawJob, '33159615');
-
-      expect(result.location).toBeUndefined();
-      expect(result.tags).toBeUndefined();
-      expect(result.workmode).toBeUndefined();
-    });
-
-    it('should handle missing title', () => {
-      const rawJob = { url: 'https://test.com/1' };
-
-      const result = index.mapToJobModel(rawJob, '33159615');
-
-      expect(result.title).toBeUndefined();
-      expect(result.url).toBe('https://test.com/1');
-    });
-  });
-
-  describe('parseApiJobs', () => {
-    it('should parse EPAM API response format', () => {
-      const apiData = {
-        data: {
-          total: 100,
-          jobs: [
-            {
-              uid: '123',
-              name: 'Senior Developer',
-              city: [{ name: 'Bucharest' }],
-              country: [{ name: 'Romania' }],
-              vacancy_type: 'Hybrid',
-              skills: ['Java', 'Spring']
-            }
-          ]
-        }
-      };
-
-      const result = index.parseApiJobs(apiData);
-
-      expect(result.jobs).toHaveLength(1);
-      expect(result.jobs[0].title).toBe('Senior Developer');
-      expect(result.jobs[0].location).toEqual(['Bucharest']);
-      expect(result.jobs[0].workmode).toBe('hybrid');
-    });
-
-    it('should handle empty job list', () => {
-      const apiData = { data: { total: 0, jobs: [] } };
-
-      const result = index.parseApiJobs(apiData);
-
-      expect(result.jobs).toEqual([]);
-    });
-
-    it('should handle missing data field', () => {
-      const result = index.parseApiJobs({});
-
-      expect(result.jobs).toEqual([]);
-    });
-
-    it('should handle multiple cities', () => {
-      const apiData = {
-        data: {
-          total: 1,
-          jobs: [
-            {
-              uid: '123',
-              name: 'Developer',
-              city: [{ name: 'Bucharest' }, { name: 'Cluj-Napoca' }],
-              country: [{ name: 'Romania' }]
-            }
-          ]
-        }
-      };
-
-      const result = index.parseApiJobs(apiData);
-
-      expect(result.jobs[0].location).toEqual(['Bucharest', 'Cluj-Napoca']);
-    });
-  });
-
-  describe('URL Generation', () => {
-    it('should use seo.url when available', () => {
-      const apiData = {
-        data: {
-          total: 1,
-          jobs: [
-            {
-              uid: 'blt123',
-              name: 'Test Job',
-              seo: { url: '/en/vacancy/test-job-blt123_en' },
-              city: [{ name: 'Bucharest' }]
-            }
-          ]
-        }
-      };
-
-      const result = index.parseApiJobs(apiData);
-
-      expect(result.jobs[0].url).toBe('https://careers.epam.com/en/vacancy/test-job-blt123_en');
-    });
-
-    it('should fallback to uid-based URL when no seo.url', () => {
-      const apiData = {
-        data: {
-          total: 1,
-          jobs: [
-            {
-              uid: 'blt456',
-              name: 'Test Job',
-              city: [{ name: 'Bucharest' }]
-            }
-          ]
-        }
-      };
-
-      const result = index.parseApiJobs(apiData);
-
-      expect(result.jobs[0].url).toBe('https://careers.epam.com/en/vacancy/blt456_en');
+      expect(result.jobs[0].location).toEqual(['Cluj-Napoca']);
     });
   });
 });

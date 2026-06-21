@@ -17,13 +17,13 @@ Toate scraper-urile derivate din acest template **MUST** avea **EXACT 2 topic-ur
 ## Cum verifici
 
 ```bash
-gh repo view <owner>/<repo> --json repositoryTopics
+gh repo view sebiboga/tec-software-solutions-srl-nodejs-scraper --json repositoryTopics
 ```
 
 ## Cum setezi
 
 ```bash
-gh repo edit <owner>/<repo> --add-topic job-seeker-ro-spider --add-topic peviitor-ro
+gh repo edit sebiboga/tec-software-solutions-srl-nodejs-scraper --add-topic job-seeker-ro-spider --add-topic peviitor-ro
 ```
 
-sau manual pe `https://github.com/<owner>/<repo>/settings`.
+sau manual pe `https://github.com/sebiboga/tec-software-solutions-srl-nodejs-scraper/settings`.

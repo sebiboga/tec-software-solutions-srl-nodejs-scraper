@@ -6,7 +6,7 @@ Thank you for your interest in contributing!
 
 This is the **reference implementation** for Node.js job scrapers in the peviitor.ro ecosystem. New scrapers for other Romanian companies should be derived from this pattern — same structure, same workflows, same testing layers.
 
-> **✅ Validated in production.** Two derived scrapers follow this exact checklist:
+> **✅ Validated in production.** Derived scrapers follow this exact checklist:
 > - [mejix-srl-nodejs-scraper](https://github.com/sebiboga/mejix-srl-nodejs-scraper) — MEJIX S.R.L. (HTML/cheerio, single-page)
 > - [talent-matchmakers-srl-nodejs-scraper](https://github.com/sebiboga/talent-matchmakers-srl-nodejs-scraper) — TALENT MATCHMAKERS S.R.L. (Teamtailor HTML/cheerio)
 > Use them as references if anything below is unclear.
@@ -35,7 +35,7 @@ Use this checklist when starting a scraper for `<COMPANY>`:
 |------|---------------|
 | `config/company.json` | Edit all fields: `cif`, `legalName`, `brand`, `website`, `careerUrl`, `apiBase`, `apiCountryId`, `defaultLocation`, `scraperFile` |
 
-All scraper code, CI workflows, and the static HTML read from this file. You should not need to edit constants in `index.js`, `company.js`, `demoanaf.js`, `tests/validate-epam-jobs.js`, `docs/index.html`, or `.github/workflows/automation-testing.yml`.
+All scraper code, CI workflows, and the static HTML read from this file. You should not need to edit constants in `index.js`, `company.js`, `demoanaf.js`, `tests/validate-tec-agency-jobs.js`, `docs/index.html`, or `.github/workflows/automation-testing.yml`.
 
 **Secondary edits (cosmetic / metadata):**
 
@@ -45,18 +45,18 @@ All scraper code, CI workflows, and the static HTML read from this file. You sho
 | `UPDATE-REPO-ABOUT.md` | New description with legal name and CIF |
 | `package.json` | `name` field |
 | `README.md` | Title, badges (URLs to the new repo), Overview |
-| `tests/validate-epam-jobs.js` | Rename to `validate-<brand>-jobs.js` |
+| `tests/validate-tec-agency-jobs.js` | Rename to `validate-<brand>-jobs.js` |
 
 **Critical — update test files to match the new scraper's API:**
 
-When you replace `parseApiJobs()` in `index.js` (EPAM JSON API) with a new parser (e.g. `parseHtmlJobs()` for HTML/cheerio), you **must** update `tests/unit/index.test.js` accordingly:
+When you replace `parseApiJobs()` in `index.js` (BambooHR JSON API) with a new parser (e.g. `parseHtmlJobs()` for HTML/cheerio), you **must** update `tests/unit/index.test.js` accordingly:
 
 - Replace the `parseApiJobs` test block with tests for the new function
-- Update test data fixtures to match the new source format (e.g. HTML fragments instead of EPAM API JSON)
+- Update test data fixtures to match the new source format (e.g. HTML fragments instead of BambooHR API JSON)
 - Update URL generation tests — the URL construction logic changes per data source
-- Also update `tests/unit/company.test.js`: replace `EPAM_ANAF_RECORD` and all hardcoded `33159615` / `EPAM SYSTEMS INTERNATIONAL SRL` values with the new company's CIF and legal name
-- Also update `tests/unit/solr.test.js`: replace all hardcoded `'33159615'`, `'EPAM SYSTEMS INTERNATIONAL SRL'`, and `'EPAM'` in mock data with the new company's CIF, legal name, and brand (tests still pass with stale values since mocks are self-referential, but the hardcoded EPAM references are misleading)
-- **Also update `tests/integration/workflow.test.js`** and **`tests/e2e/scraper.test.js`**: replace the `EPAM_CIF`/`TEST_CIF` constant (`33159615`) with the new CIF, update all hardcoded company name and brand assertions, and replace EPAM API URLs/parsing with the new data source's URL and parser function name
+- Also update `tests/unit/company.test.js`: replace `TEC_ANAF_RECORD` and all hardcoded `32971419` / `TEC SOFTWARE SOLUTIONS SRL` values with the new company's CIF and legal name
+- Also update `tests/unit/solr.test.js`: replace all hardcoded `'32971419'`, `'TEC SOFTWARE SOLUTIONS SRL'`, and `'TEC Agency'` in mock data with the new company's CIF, legal name, and brand (tests still pass with stale values since mocks are self-referential, but the hardcoded TEC references are misleading)
+- **Also update `tests/integration/workflow.test.js`** and **`tests/e2e/scraper.test.js`**: replace the `TEC_CIF`/`TEST_CIF` constant (`32971419`) with the new CIF, update all hardcoded company name and brand assertions, and replace BambooHR API URLs/parsing with the new data source's URL and parser function name
 
 Failing to update these tests will break CI immediately — the unit test step gates all downstream pipeline steps, and integration/E2E tests run next (if they query real SOLR/ANAF data instead of mocks).
 
@@ -88,7 +88,7 @@ Follow [VERIFY.md](VERIFY.md) before merging. The same 4 levels of tests (unit /
 
 ```bash
 # Clone your fork
-git clone https://github.com/YOUR_USERNAME/epam-systems-international-srl-nodejs-scraper.git
+git clone https://github.com/YOUR_USERNAME/tec-software-solutions-srl-nodejs-scraper.git
 
 # Install dependencies
 npm install
@@ -99,7 +99,7 @@ npm test
 
 ## Reporting Issues
 
-Open a [GitHub Issue](https://github.com/sebiboga/epam-systems-international-srl-nodejs-scraper/issues) with:
+Open a [GitHub Issue](https://github.com/sebiboga/tec-software-solutions-srl-nodejs-scraper/issues) with:
 - Clear description of the problem
 - Steps to reproduce
 - Expected vs actual behavior
