@@ -10,11 +10,11 @@
 | Location | HĂŞDAŢII, 12, Municipiul Gherla, Cluj |
 | Website | [https://wearetec.com](https://wearetec.com) |
 | Careers | [https://wearetec.com/careers/](https://wearetec.com/careers/) |
-| Last Scraped | 2026-07-21 |
+| Last Scraped | 2026-07-22 |
 
 ## Current Job Listings (1)
 
-_Generated: 2026-07-21T08:37:22.301Z_
+_Generated: 2026-07-22T08:36:51.666Z_
 
 ### Full Stack Developer
 
